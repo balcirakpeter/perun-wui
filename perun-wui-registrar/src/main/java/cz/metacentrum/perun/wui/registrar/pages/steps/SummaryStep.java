@@ -12,8 +12,10 @@ import cz.metacentrum.perun.wui.client.utils.Utils;
 import cz.metacentrum.perun.wui.json.Events;
 import cz.metacentrum.perun.wui.json.JsonEvents;
 import cz.metacentrum.perun.wui.json.managers.AttributesManager;
+import cz.metacentrum.perun.wui.json.managers.RegistrarManager;
 import cz.metacentrum.perun.wui.model.GeneralObject;
 import cz.metacentrum.perun.wui.model.PerunException;
+import cz.metacentrum.perun.wui.model.beans.Application;
 import cz.metacentrum.perun.wui.model.beans.Attribute;
 import cz.metacentrum.perun.wui.model.beans.Group;
 import cz.metacentrum.perun.wui.model.beans.Vo;
@@ -42,6 +44,7 @@ import org.gwtbootstrap3.client.ui.constants.IconType;
 import org.gwtbootstrap3.client.ui.constants.ListGroupItemType;
 import org.gwtbootstrap3.client.ui.constants.ModalBackdrop;
 import org.gwtbootstrap3.client.ui.constants.Pull;
+import org.gwtbootstrap3.client.ui.html.Paragraph;
 import org.gwtbootstrap3.client.ui.html.Text;
 
 import java.util.ArrayList;
@@ -250,10 +253,15 @@ public class SummaryStep implements Step {
 
 		// Show continue button
 		PerunButton continueBtn = null;
-		if (summary.alreadyMemberOfVo() || summary.alreadyAppliedToVo()) {
+		if (summary.alreadyMemberOfVo()) {
+			// user visited registration form, but is already registered
 			continueBtn = getContinueButton(TARGET_EXISTING);
+		} else if (summary.alreadyAppliedToVo()) {
+			// user visited registration form again (back from service?), his registration is not yet verified/approved
+			continueBtn = getContinueButton(TARGET_NEW, res);
 		} else if (res.isOk() || res.getException().getName().equals("RegistrarException")) {
-			continueBtn = getContinueButton(TARGET_NEW);
+			// user submitted registration, it might have failed
+			continueBtn = getContinueButton(TARGET_NEW, res);
 		}
 
 		displaySummary(title, messages, continueBtn);
@@ -296,7 +304,7 @@ public class SummaryStep implements Step {
 
 		} else {
 			// FIXME - solve this BLEEEH hack in better way.
-			if (res.getException().getName().equals("DuplicateRegistrationAttemptException")) {
+			if (res.getException() != null && "DuplicateRegistrationAttemptException".equals(res.getException().getName())) {
 				res.getException().setName("DuplicateExtensionAttemptException");
 			}
 			displayException(res.getException(), res.getBean());
@@ -305,13 +313,16 @@ public class SummaryStep implements Step {
 		// Show continue button
 		PerunButton continueBtn = null;
 		if (res.isOk() || res.getException().getName().equals("RegistrarException")) {
-			continueBtn = getContinueButton(TARGET_EXTENDED);
-		} else if (summary.alreadyAppliedForVoExtension() || summary.alreadyMemberOfVo()) {
+			continueBtn = getContinueButton(TARGET_EXTENDED, res);
+		} else if (summary.alreadyAppliedForVoExtension()) {
+			continueBtn = getContinueButton(TARGET_EXTENDED, res);
+		} else if (summary.alreadyMemberOfVo()) {
 			continueBtn = getContinueButton(TARGET_EXISTING);
 		}
 
 		// FIXME: HACK for ELIXIR - if is member and link should go out of registrar, leave immediatelly
-		if (summary.alreadyMemberOfVo()) {
+		if (summary.alreadyMemberOfVo() && !summary.alreadyAppliedForVoExtension()) {
+			// only when there is no pending extension application !!
 			String url = Window.Location.getParameter(TARGET_EXISTING);
 			if (url != null && !url.isEmpty()) {
 				Window.Location.assign(url);
@@ -370,10 +381,12 @@ public class SummaryStep implements Step {
 
 		// Show continue button
 		PerunButton continueBtn = null;
-		if (summary.alreadyMemberOfGroup() || summary.alreadyAppliedToGroup()) {
+		if (summary.alreadyMemberOfGroup()) {
 			continueBtn = getContinueButton(TARGET_EXISTING);
+		} else if (summary.alreadyAppliedToGroup()) {
+			continueBtn = getContinueButton(TARGET_NEW, res);
 		} else if (res.isOk() || res.getException().getName().equals("RegistrarException")) {
-			continueBtn = getContinueButton(TARGET_NEW);
+			continueBtn = getContinueButton(TARGET_NEW, res);
 		}
 
 		displaySummary(title, messages, continueBtn);
@@ -422,7 +435,7 @@ public class SummaryStep implements Step {
 
 		} else {
 			// FIXME - solve this BLEEEH hack in better way.
-			if (res.getException().getName().equals("DuplicateRegistrationAttemptException")) {
+			if (res.getException() != null && "DuplicateRegistrationAttemptException".equals(res.getException().getName())) {
 				res.getException().setName("DuplicateExtensionAttemptException");
 			}
 			displayException(res.getException(), res.getBean());
@@ -430,10 +443,12 @@ public class SummaryStep implements Step {
 
 		// Show continue button
 		PerunButton continueBtn = null;
-		if (summary.alreadyMemberOfGroup() || summary.alreadyAppliedForGroupExtension()) {
+		if (summary.alreadyMemberOfGroup()) {
 			continueBtn = getContinueButton(TARGET_EXISTING);
+		} else if (summary.alreadyAppliedForGroupExtension()) {
+			continueBtn = getContinueButton(TARGET_EXTENDED, res);
 		} else if (res.isOk() || res.getException().getName().equals("RegistrarException")) {
-			continueBtn = getContinueButton(TARGET_EXTENDED);
+			continueBtn = getContinueButton(TARGET_EXTENDED, res);
 		}
 
 		displaySummary(title, messages, continueBtn);
@@ -515,10 +530,15 @@ public class SummaryStep implements Step {
 
 		// Show continue button
 		PerunButton continueBtn = null;
-		if (summary.alreadyMemberOfGroup() || summary.alreadyAppliedToGroup()) {
+		if (summary.alreadyMemberOfGroup()) {
 			continueBtn = getContinueButton(TARGET_EXISTING);
+		} else if (summary.alreadyAppliedToGroup()) {
+			// FIXME - we must pass both results
+			// NOTE - how is it handled, when both VO and group are awaiting approval ??
+			continueBtn = getContinueButton(TARGET_NEW, resultGroup);
 		} else if ((resultGroup.isOk() || resultGroup.getException().getName().equals("RegistrarException"))
 				&& (resultVo.isOk() || resultVo.getException().getName().equals("RegistrarException"))) {
+			// FIXME - we must pass both results
 			continueBtn = getContinueButton(TARGET_NEW);
 		}
 
@@ -560,7 +580,7 @@ public class SummaryStep implements Step {
 
 		} else {
 			// FIXME - solve this BLEEEH hack in better way.
-			if (resultVo.getException().getName().equals("DuplicateRegistrationAttemptException")) {
+			if (resultVo.getException() != null && "DuplicateRegistrationAttemptException".equals(resultVo.getException().getName())) {
 				resultVo.getException().setName("DuplicateExtensionAttemptException");
 			}
 			displayException(resultVo.getException(), resultVo.getBean());
@@ -603,10 +623,12 @@ public class SummaryStep implements Step {
 
 		// Show continue button
 		PerunButton continueBtn = null;
-		if (summary.alreadyMemberOfGroup() || summary.alreadyAppliedToGroup()) {
+		if (summary.alreadyMemberOfGroup()) {
 			continueBtn = getContinueButton(TARGET_EXISTING);
+		} else if (summary.alreadyAppliedToGroup()) {
+			continueBtn = getContinueButton(TARGET_NEW, resultGroup);
 		} else if (resultGroup.isOk() || resultGroup.getException().getName().equals("RegistrarException")) {
-			continueBtn = getContinueButton(TARGET_NEW);
+			continueBtn = getContinueButton(TARGET_NEW, resultGroup);
 		}
 
 		displaySummary(title, messages, continueBtn);
@@ -647,7 +669,7 @@ public class SummaryStep implements Step {
 
 		} else {
 			// FIXME - solve this BLEEEH hack in better way.
-			if (resultVo.getException().getName().equals("DuplicateRegistrationAttemptException")) {
+			if (resultVo.getException() != null && "DuplicateRegistrationAttemptException".equals(resultVo.getException().getName())) {
 				resultVo.getException().setName("DuplicateExtensionAttemptException");
 			}
 			displayException(resultVo.getException(), resultVo.getBean());
@@ -686,7 +708,7 @@ public class SummaryStep implements Step {
 
 		} else {
 			// FIXME - solve this BLEEEH hack in better way.
-			if (resultVo.getException().getName().equals("DuplicateRegistrationAttemptException")) {
+			if ("DuplicateRegistrationAttemptException".equals(resultVo.getException().getName())) {
 				resultVo.getException().setName("DuplicateExtensionAttemptException");
 			}
 			displayException(resultGroup.getException(), resultGroup.getBean());
@@ -694,10 +716,12 @@ public class SummaryStep implements Step {
 
 		// Show continue button
 		PerunButton continueBtn = null;
-		if (summary.alreadyMemberOfGroup() || summary.alreadyAppliedForGroupExtension()) {
+		if (summary.alreadyMemberOfGroup()) {
 			continueBtn = getContinueButton(TARGET_EXISTING);
+		} else if (summary.alreadyAppliedForGroupExtension()) {
+			continueBtn = getContinueButton(TARGET_EXTENDED, resultGroup);
 		} else if (resultGroup.isOk() || resultGroup.getException().getName().equals("RegistrarException")) {
-			continueBtn = getContinueButton(TARGET_EXTENDED);
+			continueBtn = getContinueButton(TARGET_EXTENDED, resultGroup);
 		}
 
 		displaySummary(title, messages, continueBtn);
@@ -759,8 +783,11 @@ public class SummaryStep implements Step {
 
 	}
 
-
 	private PerunButton getContinueButton(final String urlParameter) {
+		return getContinueButton(urlParameter, null);
+	}
+
+	private PerunButton getContinueButton(final String urlParameter, final Result previousResult) {
 
 		if (Window.Location.getParameter(urlParameter) != null) {
 
@@ -771,7 +798,7 @@ public class SummaryStep implements Step {
 			continueButton.setSize(ButtonSize.LARGE);
 			continueButton.setType(ButtonType.SUCCESS);
 
-			continueButton.addClickHandler(new ClickHandler() {
+			final ClickHandler clickHandler = new ClickHandler() {
 				@Override
 				public void onClick(ClickEvent event) {
 
@@ -801,8 +828,109 @@ public class SummaryStep implements Step {
 						}
 					};
 					timer.schedule(7000);
+
 				}
-			});
+			};
+
+			if (previousResult != null && previousResult.getException() != null && (
+					"DuplicateRegistrationAttemptException".equalsIgnoreCase(previousResult.getException().getName()) ||
+					"DuplicateExtensionAttemptException".equalsIgnoreCase(previousResult.getException().getName()))) {
+
+				final Application application = previousResult.getException().getApplication();
+
+				String text = (Application.ApplicationState.NEW.equals(application.getState())) ? translation.redirectWaitForVerification() : translation.redirectWaitForApproval();
+
+				final Modal modal = new Modal();
+				modal.setTitle(application.getTranslatedState());
+				modal.setFade(true);
+				modal.setDataKeyboard(false);
+				modal.setDataBackdrop(ModalBackdrop.STATIC);
+				modal.setClosable(false);
+				modal.setWidth("750px");
+
+				ModalBody body = new ModalBody();
+				final Paragraph content =new Paragraph(text);
+				body.add(content);
+				modal.add(body);
+
+				Button button = new Button(translation.understand());
+				button.setType(ButtonType.PRIMARY);
+				button.addClickHandler(new ClickHandler() {
+					@Override
+					public void onClick(ClickEvent event) {
+						modal.hide();
+					}
+				});
+
+				Button button2 = new Button(translation.continueAnyway());
+				button2.setType(ButtonType.DEFAULT);
+				button2.addClickHandler(new ClickHandler() {
+					@Override
+					public void onClick(ClickEvent event) {
+						// perform final redirect
+						modal.hide();
+						clickHandler.onClick(event);
+					}
+				});
+
+				ModalFooter footer = new ModalFooter();
+				footer.add(button);
+				footer.add(button2);
+				modal.add(footer);
+
+				continueButton.addClickHandler(new ClickHandler() {
+					@Override
+					public void onClick(ClickEvent event) {
+
+						// check if
+						RegistrarManager.getApplicationById(application.getId(), new JsonEvents() {
+							@Override
+							public void onFinished(JavaScriptObject result) {
+
+								continueButton.setProcessing(false);
+								Application currentAppState = result.cast();
+
+								if (Application.ApplicationState.NEW.equals(currentAppState.getState())) {
+									content.setHTML(translation.redirectWaitForVerification());
+									// modal will allow redirect
+									modal.show();
+								} else if (Application.ApplicationState.VERIFIED.equals(currentAppState.getState())) {
+									// verified in the mean time
+									PerunException fakeException = PerunException.createNew("0","DuplicateRegistrationAttemptException", "");
+									fakeException.setApplication(currentAppState);
+									displayException(fakeException, (currentAppState.getGroup() != null) ? currentAppState.getGroup() : currentAppState.getVo());
+									formView.hideMailVerificationAlert();
+									content.setHTML(translation.redirectWaitForApproval());
+									// modal will allow redirect
+									modal.show();
+								} else if (Application.ApplicationState.APPROVED.equals(currentAppState.getState())) {
+									// no modal needed - click to go
+									formView.hideNotice();
+									clickHandler.onClick(event);
+								}
+
+							}
+
+							@Override
+							public void onError(PerunException error) {
+								continueButton.setProcessing(false);
+								// ignore - use previous known state
+								// modal will allow redirect
+								modal.show();
+							}
+
+							@Override
+							public void onLoadingStart() {
+								continueButton.setProcessing(true);
+							}
+						});
+
+					}
+				});
+
+			} else {
+				continueButton.addClickHandler(clickHandler);
+			}
 			return continueButton;
 
 		}
